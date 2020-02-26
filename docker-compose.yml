@@ -1,0 +1,119 @@
+version: '3.7'
+
+networks:
+  http:
+    name: http-net
+  dns:
+    name: dns-net
+    ipam:
+      config:
+        - subnet: 172.16.241.0/24
+
+services:
+  traefik:
+    container_name: traefik
+    image: traefik
+    logging:
+      driver: $LOG_DRIVER
+    restart: unless-stopped
+    ports:
+      - "443:443"
+    networks:
+      - http
+    environment:
+      - TRAEFIK_CERTIFICATESRESOLVERS_tls-resolver_ACME_EMAIL=$ACME_EMAIL
+    volumes:
+      - ./secrets/acme.json:/etc/traefik/acme.json
+      - ./secrets/htpasswd:/etc/traefik/htpasswd:ro
+      - ./conf/traefik.yml:/traefik.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+  pi-hole:
+    container_name: pi-hole
+    image: pihole/pihole
+    logging:
+      driver: $LOG_DRIVER
+    restart: unless-stopped
+    depends_on:
+      - coredns-outbound
+    networks:
+      http: {}
+      dns:
+        ipv4_address: 172.16.241.20
+    environment:
+      - TZ
+      - DNS1=172.16.241.30
+      - DNS2=no
+      - VIRTUAL_HOST=pi-hole.http-net
+      - WEBPASSWORD=
+    volumes:
+      - ./etc/pi-hole:/etc/pihole
+      - ./etc/dnsmasq:/etc/dnsmasq.d
+      # workaround for docker not honoring DNS setup
+      - ./conf/pi-hole.resolv.conf:/etc/resolv.conf:ro
+    # dns:
+      # - 127.0.0.1
+      # - 127.0.0.11
+    labels:
+      - traefik.enable=true
+      - traefik.http.services.pi-hole-http.loadbalancer.server.port=80
+      - traefik.tcp.services.pi-hole-dns.loadbalancer.server.port=53
+      # admin reverse proxy
+      - traefik.http.routers.pi-hole-dashboard.rule=Host(`$PI_HOLE_SUB_DOMAIN.$DOMAIN`)
+      - traefik.http.routers.pi-hole-dashboard.entrypoints=websecure
+      - traefik.http.routers.pi-hole-dashboard.tls.certresolver=tls-resolver
+      - traefik.http.routers.pi-hole-dashboard.middlewares=pi-hole-dashboard-auth,pi-hole-dashboard-path
+      - traefik.http.middlewares.pi-hole-dashboard-path.addprefix.prefix=/admin/
+      - traefik.http.middlewares.pi-hole-dashboard-auth.basicauth.usersfile=/etc/traefik/htpasswd
+      # dns over tcp reverse proxy
+      - traefik.tcp.routers.pi-hole-dns-tcp.rule=HostSNI(`*`)
+      - traefik.tcp.routers.pi-hole-dns-tcp.entrypoints=dns-tcp
+      # dns over tls tcp reverse proxy
+      - traefik.tcp.routers.pi-hole-dns-tls-tcp.rule=HostSNI(`$DNS_SUB_DOMAIN.$DOMAIN`)
+      - traefik.tcp.routers.pi-hole-dns-tls-tcp.entrypoints=dnssecure-tcp
+      - traefik.tcp.routers.pi-hole-dns-tls-tcp.tls.certresolver=tls-resolver
+  coredns-inbound:
+    container_name: coredns-inbound
+    image: coredns/coredns
+    logging:
+      driver: $LOG_DRIVER
+    restart: unless-stopped
+    ports:
+      - "853:853/udp"
+      - "853:853/tcp"
+      - "53:53/udp"
+      - "53:53/tcp"
+    depends_on:
+      - traefik
+      - acme-helper
+    networks:
+      dns:
+        ipv4_address: 172.16.241.10
+    environment:
+      - PI_HOLE_IP=172.16.241.20
+    volumes:
+      - ./etc/acme-helper:/etc/acme-helper:ro
+      - ./conf/inbound.corefile.conf:/Corefile:ro
+  coredns-outbound:
+    container_name: coredns-outbound
+    image: coredns/coredns
+    restart: unless-stopped
+    networks:
+      dns:
+        ipv4_address: 172.16.241.30
+    environment:
+      - UPSTREAM_DNS_1
+      - UPSTREAM_DNS_2
+      - UPSTREAM_DNS_HOSTNAME
+    volumes:
+      - ./conf/outbound.corefile.conf:/Corefile:ro
+  acme-helper:
+    container_name: acme-helper
+    image: acme-helper
+    build:
+      context: ./docker/acme-helper
+    environment:
+      - DUMP_DOMAIN=$DNS_SUB_DOMAIN.$DOMAIN
+    volumes:
+      - ./etc/acme-helper:/etc/acme-helper
+      - ./secrets/acme.json:/etc/traefik/acme.json:ro
+      - /var/run/docker.sock:/var/run/docker.sock

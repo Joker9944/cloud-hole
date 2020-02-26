@@ -1,0 +1,23 @@
+log:
+  level: INFO
+
+entryPoints:
+  websecure:
+    address: ":443"
+  dns-tcp:
+    address: ":53"
+  dnssecure-tcp:
+    address: ":853"
+
+providers:
+  docker:
+    network: http-net
+    exposedByDefault: false
+
+certificatesResolvers:
+  tls-resolver:
+    acme:
+      storage: /etc/traefik/acme.json
+      tlsChallenge: {}
+      httpChallenge:
+        entryPoint: websecure
