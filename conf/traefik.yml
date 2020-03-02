@@ -1,6 +1,8 @@
 log:
   level: INFO
 
+ping: {}
+
 entryPoints:
   websecure:
     address: ":443"
