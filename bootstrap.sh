@@ -15,4 +15,3 @@ chmod 600 secrets/htpasswd
 cp .env.example .env
 
 docker-compose pull
-docker-compose build
