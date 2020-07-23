@@ -80,6 +80,8 @@ services:
   coredns-outbound:
     container_name: coredns-outbound
     image: coredns/coredns
+    logging:
+      driver: $LOG_DRIVER
     restart: unless-stopped
     networks:
       cloud-hole:
