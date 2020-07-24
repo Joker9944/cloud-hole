@@ -44,18 +44,17 @@ services:
         ipv4_address: 172.16.241.20
     environment:
       - TZ
-      - DNS1=172.16.241.30
+      - DNS1=127.0.0.11
       - DNS2=no
       - VIRTUAL_HOST=pi-hole.cloud-hole-net
       - WEBPASSWORD=
     volumes:
       - ./etc/pi-hole:/etc/pihole
       - ./etc/dnsmasq:/etc/dnsmasq.d
-      # workaround for docker not honoring DNS setup
+      # workaround to make DNSMASQ compatible with Docker - https://github.com/pi-hole/docker-pi-hole/issues/410
       - ./conf/pi-hole.resolv.conf:/etc/resolv.conf:ro
-    # dns:
-      # - 127.0.0.1
-      # - 127.0.0.11
+    dns:
+      - 172.16.241.30
     labels:
       - traefik.enable=true
       - traefik.http.services.pi-hole.loadbalancer.server.port=80
