@@ -23,5 +23,6 @@ certificatesResolvers:
     acme:
       storage: /etc/traefik/acme.json
       tlsChallenge: {}
+      preferredChain: 'ISRG Root X1'
       httpChallenge:
         entryPoint: websecure
